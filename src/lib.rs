@@ -12,6 +12,7 @@ use esp32_hal::{
     gpio::{Gpio18, Gpio19, Gpio27, Gpio5, Output, PushPull},
     i2c,
     prelude::*,
+    serial::{config::Config, Pins, Serial},
     spi::{self, SPI},
     target,
     timer::Timer,
@@ -29,11 +30,11 @@ impl Default for NoPin {
 }
 
 #[derive(Debug)]
-pub enum Infalible {}
+pub enum Infallible {}
 
 impl OutputPin for NoPin {
     /// Error type
-    type Error = Infalible;
+    type Error = Infallible;
 
     /// Drives the pin low
     ///
@@ -55,6 +56,7 @@ impl OutputPin for NoPin {
 #[derive(Debug)]
 pub enum TWatchError {
     DisplayError,
+    PMUError
 }
 
 pub fn sleep(delay: MicroSeconds) {
@@ -80,6 +82,8 @@ pub struct TWatch {
 
 impl TWatch {
     pub fn new(dp: target::Peripherals) -> Self {
+        dprintln!("Creating new Twatch");
+
         let (mut dport, dport_clock_control) = dp.DPORT.split();
 
         let clkcntrl = ClockControl::new(
@@ -91,6 +95,7 @@ impl TWatch {
         .unwrap();
 
         let (clkcntrl_config, mut watchdog) = clkcntrl.freeze().unwrap();
+    
         watchdog.disable();
 
         let (_, _, _, mut watchdog0) = Timer::new(dp.TIMG0, clkcntrl_config);
@@ -101,8 +106,7 @@ impl TWatch {
         let pins = dp.GPIO.split();
 
         // Use UART1 as example: will cause dprintln statements not to be printed
-        /*
-        let serial: Serial<_, _, _> = Serial::new(
+        let _serial: Serial<_, _, _> = Serial::new(
             dp.UART1,
             Pins {
                 tx: pins.gpio1,
@@ -118,7 +122,6 @@ impl TWatch {
             clkcntrl_config,
         )
         .unwrap();
-        */
 
         let mut gpio_backlight = pins.gpio12.into_push_pull_output();
         let sclk = pins.gpio18.into_push_pull_output();
@@ -142,7 +145,7 @@ impl TWatch {
             spi::config::Config {
                 baudrate: 80.MHz().into(),
                 bit_order: spi::config::BitOrder::MSBFirst,
-                data_mode: spi::config::MODE_1,
+                data_mode: spi::config::MODE_0,
             },
             clkcntrl_config,
         )
@@ -167,7 +170,7 @@ impl TWatch {
         let spi_if = SPIInterfaceNoCS::new(spi, gpio_dc);
 
         // create driver
-        let mut display = ST7789::new(spi_if, NoPin::default(), 240, 240);
+        let mut display = ST7789::new(spi_if, NoPin::default(), 240, 320);
 
         // set default orientation
         display.set_orientation(Orientation::Portrait).unwrap();
@@ -177,6 +180,7 @@ impl TWatch {
     }
 
     pub fn get_battery_percentage(&mut self) -> Result<u8, axp20x::AXPError> {
+        dprintln!("Get battery percentage\r");
         match self.pmu.get_battery_percentage() {
             Ok(127) => {
                 let voltage: f32 = self.pmu.get_battery_voltage()?;

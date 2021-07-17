@@ -6,10 +6,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#st7789 = { git = "https://github.com/almindor/st7789.git", branch = "master", features = ["graphics"] }
-st7789 = { path = "../st7789", features = ["batch", "graphics"] }
-#axp20x = { git = "https://github.com/pyaillet/axp20x-rs.git", branch = "main" }
-axp20x = { path = "../axp20x-rs" }
+st7789 = { version = "0.6", features = [ "graphics", "batch" ]}
+axp20x = { git = "https://github.com/pyaillet/axp20x-rs.git", branch = "main" }
 xtensa-lx-rt = "0.5"
 xtensa-lx = "0.3"
 panic-halt = "0.2"
