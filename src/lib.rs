@@ -18,7 +18,10 @@ use esp32_hal::{
     timer::Timer,
 };
 
+use shared_bus;
+
 use axp20x::AXP20X;
+use pcf8563::*;
 use st7789::{Orientation, ST7789};
 
 pub struct NoPin {}
@@ -56,15 +59,17 @@ impl OutputPin for NoPin {
 #[derive(Debug)]
 pub enum TWatchError {
     DisplayError,
-    PMUError
+    PMUError,
+    RTCError,
 }
 
 pub fn sleep(delay: MicroSeconds) {
     esp32_hal::clock_control::sleep(delay);
 }
 
-pub struct TWatch {
-    pub pmu: AXP20X<esp32_hal::i2c::I2C<esp32::I2C0>>,
+pub struct TWatch<'a> {
+    pub pmu:
+        AXP20X<shared_bus::I2cProxy<'a, shared_bus::NullMutex<esp32_hal::i2c::I2C<esp32::I2C0>>>>,
     pub display: ST7789<
         SPIInterfaceNoCS<
             esp32_hal::spi::SPI<
@@ -78,9 +83,11 @@ pub struct TWatch {
         >,
         NoPin,
     >,
+    pub rtc:
+        PCF8563<shared_bus::I2cProxy<'a, shared_bus::NullMutex<esp32_hal::i2c::I2C<esp32::I2C0>>>>,
 }
 
-impl TWatch {
+impl<'a> TWatch<'static> {
     pub fn new(dp: target::Peripherals) -> Self {
         dprintln!("Creating new Twatch");
 
@@ -95,7 +102,7 @@ impl TWatch {
         .unwrap();
 
         let (clkcntrl_config, mut watchdog) = clkcntrl.freeze().unwrap();
-    
+
         watchdog.disable();
 
         let (_, _, _, mut watchdog0) = Timer::new(dp.TIMG0, clkcntrl_config);
@@ -160,8 +167,27 @@ impl TWatch {
             400_000,
             &mut dport,
         );
-        let mut pmu = axp20x::AXP20X::new(i2c0);
+
+        static mut BUS: Option<shared_bus::BusManagerSimple<esp32_hal::i2c::I2C<esp32::I2C0>>> =
+            None;
+
+        #[allow(unsafe_code)]
+        let used = unsafe { BUS.is_some() };
+        if !used {
+            let bus = shared_bus::BusManagerSimple::new(i2c0);
+
+            #[allow(unsafe_code)]
+            unsafe {
+                BUS = Some(bus);
+            }
+        };
+
+        let bus = unsafe { BUS.as_mut().unwrap() };
+
+        let mut pmu = axp20x::AXP20X::new(bus.acquire_i2c());
         pmu.init(&mut esp32_hal::delay::Delay::new()).unwrap();
+
+        let rtc = PCF8563::new(bus.acquire_i2c());
 
         gpio_backlight.set_low().unwrap();
 
@@ -176,7 +202,7 @@ impl TWatch {
         display.set_orientation(Orientation::Portrait).unwrap();
 
         gpio_backlight.set_high().unwrap();
-        Self { display, pmu }
+        Self { display, pmu, rtc }
     }
 
     pub fn get_battery_percentage(&mut self) -> Result<u8, axp20x::AXPError> {
