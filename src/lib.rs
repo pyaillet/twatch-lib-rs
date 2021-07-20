@@ -168,21 +168,7 @@ impl<'a> TWatch<'static> {
             &mut dport,
         );
 
-        static mut BUS: Option<shared_bus::BusManagerSimple<esp32_hal::i2c::I2C<esp32::I2C0>>> =
-            None;
-
-        #[allow(unsafe_code)]
-        let used = unsafe { BUS.is_some() };
-        if !used {
-            let bus = shared_bus::BusManagerSimple::new(i2c0);
-
-            #[allow(unsafe_code)]
-            unsafe {
-                BUS = Some(bus);
-            }
-        };
-
-        let bus = unsafe { BUS.as_mut().unwrap() };
+        let bus = xtensa_lx::singleton!(:shared_bus::BusManagerSimple<esp32_hal::i2c::I2C<esp32::I2C0>> = shared_bus::BusManagerSimple::new(i2c0)).unwrap();
 
         let mut pmu = axp20x::AXP20X::new(bus.acquire_i2c());
         pmu.init(&mut esp32_hal::delay::Delay::new()).unwrap();
