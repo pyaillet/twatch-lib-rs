@@ -9,7 +9,8 @@ edition = "2018"
 # devices
 st7789 = { version = "0.6", features = [ "graphics", "batch" ]}
 axp20x = { git = "https://github.com/pyaillet/axp20x-rs.git", branch = "main" }
-pcf8563 = "0.1.0"
+#pcf8563 = "0.1.0"
+pcf8563 = { git = "https://github.com/pyaillet/pcf8563-rs.git", branch = "fix-datetime-read" }
 
 # arch
 xtensa-lx-rt = "0.5"
